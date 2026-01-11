@@ -1,68 +1,77 @@
 import ccxt
 import time
 import requests
-import os
+import threading
+from flask import Flask
 
-# --- הגדרות ---
-# הערה: בשרת אמיתי כדאי להשתמש ב-Environment Variables, אבל כרגע נשאיר את זה ככה לנוחותך
-TELEGRAM_TOKEN = '8220270822:AAE8KKxTVSPBE77ShcMtENgFuUvxWx0j_qY'
-TELEGRAM_CHAT_ID = '-1003576351766'
-THRESHOLD = 0.25  # סף התראה לרווח נטו (אחרי עמלות) ב-%
-AVG_FEES = 0.2    # עמלה משולבת מוערכת (קנייה + מכירה) ב-%
+# הגדרת שרת אינטרנט קטן כדי ש-Render יראה שהבוט "חי"
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
+def run_flask():
+    # Render מעבירה את הפורט במשתנה סביבה, אם לא קיים נשתמש ב-8080
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# --- הגדרות הבוט שלך ---
+TOKEN = "7369970928:AAHny6v0fN7V_hWlT7L3z67S8zI-yY3D7oY"
+CHAT_ID = "5334659223"
 
 SYMBOLS = [
-    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 
-    'AVAX/USDT', 'DOT/USDT', 'DOGE/USDT', 'PEPE/USDT', 'SHIB/USDT',
-    'NEAR/USDT', 'FET/USDT', 'LINK/USDT', 'MATIC/USDT', 'ARB/USDT',
-    'OP/USDT', 'INJ/USDT', 'TIA/USDT', 'RNDR/USDT', 'SUI/USDT'
+    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT',
+    'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT',
+    'DOGE/USDT', 'SHIB/USDT', 'LTC/USDT', 'BCH/USDT', 'UNI/USDT',
+    'NEAR/USDT', 'TIA/USDT', 'APT/USDT', 'OP/USDT', 'ARB/USDT'
 ]
 
-EXCHANGES = ['bybit', 'mexc', 'okx']
+exchanges = {
+    'bybit': ccxt.bybit(),
+    'mexc': ccxt.mexc({'options': {'adjustForTimeDifference': True}}),
+    'okx': ccxt.okx()
+}
 
-# יצירת חיבורים לבורסות
-exchange_instances = {name: getattr(ccxt, name)({'enableRateLimit': True}) for name in EXCHANGES}
-
-def send_telegram_msg(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        return response.status_code == 200
-    except:
-        return False
+        requests.post(url, json=payload)
+    except Exception as e:
+        print(f"Telegram error: {e}")
 
-def run_bot():
-    print(f"🚀 הבוט הופעל בענן וסורק {len(SYMBOLS)} מטבעות...")
-    send_telegram_msg(f"☁️ הבוט הופעל בהצלחה בשרת הענן! סורק כעת {len(SYMBOLS)} נכסים.")
-    
+def check_arbitrage():
+    send_telegram_message("🤖 הבוט המעודכן הופעל בהצלחה בשרת הענן!")
     while True:
         for symbol in SYMBOLS:
             prices = {}
-            for name, ex in exchange_instances.items():
+            for name, exchange in exchanges.items():
                 try:
-                    ticker = ex.fetch_ticker(symbol)
+                    ticker = exchange.fetch_ticker(symbol)
                     prices[name] = ticker['last']
                 except:
                     continue
-            
-            if len(prices) >= 2:
-                high_ex = max(prices, key=prices.get)
-                low_ex = min(prices, key=prices.get)
-                
-                gross_spread = ((prices[high_ex] - prices[low_ex]) / prices[low_ex]) * 100
-                net_profit = gross_spread - AVG_FEES
-                
-                if net_profit >= THRESHOLD:
-                    msg = (f"💰 הזדמנות רווח! ({symbol})\n"
-                           f"📊 רווח נטו: {net_profit:.2f}% (אחרי עמלות)\n"
-                           f"📈 הפרש גולמי: {gross_spread:.2f}%\n"
-                           f"-----------------------\n"
-                           f"🛒 קנה ב-{low_ex.upper()}: {prices[low_ex]}\n"
-                           f"💰 מכור ב-{high_ex.upper()}: {prices[high_ex]}")
-                    send_telegram_msg(msg)
+
+            if len(prices) > 1:
+                highest = max(prices, key=prices.get)
+                lowest = min(prices, key=prices.get)
+                diff = ((prices[highest] - prices[lowest]) / prices[lowest]) * 100
+                net_diff = diff - 0.2  # הערכת עמלות
+
+                if net_diff > 0.25:
+                    msg = (f"🚀 הזדמנות ארביטראז'!\nנכס: {symbol}\n"
+                           f"קנה ב-{lowest}: {prices[lowest]}\n"
+                           f"מכור ב-{highest}: {prices[highest]}\n"
+                           f"רווח נטו מוערך: {net_diff:.2f}%")
+                    send_telegram_message(msg)
         
-        # המתנה של 30 שניות בין סריקות כדי לא לחסום את ה-IP בשרת החינמי
+        print("No open ports detected, continuing to scan...") # הודעה ללוגים של Render
         time.sleep(30)
 
 if __name__ == "__main__":
-    run_bot()
+    # הפעלת שרת האינטרנט בשרשור נפרד (Thread) כדי שלא יעצור את הבוט
+    threading.Thread(target=run_flask).start()
+    # הפעלת סורק הארביטראז'
+    check_arbitrage()
