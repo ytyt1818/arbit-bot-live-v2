@@ -5,24 +5,20 @@ import threading
 from flask import Flask
 import os
 
-# 1. הגדרת שרת אינטרנט יציב עבור Render
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    # דף סטטוס פשוט כדי שנוכל לוודא שהבוט חי דרך הדפדפן
-    return "✅ Crypto Bot is Live and Scanning!", 200
+    return "Bot is Live and Secure", 200
 
 def run_flask():
-    # Render תמיד מצפה לפורט 10000 בתוכנית החינמית
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# 2. משיכת נתונים מאובטחת - מבטיח שלא תחסם ע"י GitHub שוב
+# משיכת המשתנים מה-Environment של Render
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# 3. הגדרות בורסות ורשימת מטבעות
 SYMBOLS = [
     'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT',
     'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT'
@@ -35,26 +31,25 @@ exchanges = {
 }
 
 def send_telegram_message(message):
-    """פונקציה חסינה לשליחת הודעות עם דיווח שגיאות ליומנים"""
+    # בדיקה אם המשתנים קיימים בזיכרון של השרת
     if not TOKEN or not CHAT_ID:
-        print("❌ שגיאה קריטית: חסר TOKEN או CHAT_ID בהגדרות ה-Environment!")
+        print(f"DEBUG: Credentials missing! TOKEN: {bool(TOKEN)}, CHAT: {bool(CHAT_ID)}")
         return
     
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
         response = requests.post(url, json=payload, timeout=10)
-        # מדפיס ל-Logs ב-Render כדי שנדע בוודאות שההודעה יצאה
-        print(f"📡 Telegram API: Status {response.status_code}")
+        print(f"Telegram status: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"❌ שגיאת תקשורת לטלגרם: {e}")
+        print(f"Telegram connection error: {e}")
 
 def check_arbitrage():
-    """הלולאה המרכזית של סריקת הארביטראז'"""
-    print("🚀 הבוט מתחיל סריקה סופית ומאובטחת...")
+    # שורה זו חייבת להופיע ב-Logs כדי לדעת שהקוד רץ
+    print("🚀 Scanner started successfully")
     
-    # הודעת "אני חי" לטלגרם - אם קיבלת אותה, הכל עובד מושלם
-    send_telegram_message("🤖 הבוט הופעל בהצלחה! סורק כעת פערים מעל 0.05%.")
+    # ניסיון שליחה ראשון מיד עם העלייה
+    send_telegram_message("⚡️ הבוט חזר לפעילות! מתחיל סריקה מאובטחת.")
     
     while True:
         for symbol in SYMBOLS:
@@ -67,28 +62,21 @@ def check_arbitrage():
                     continue
 
             if len(prices) > 1:
-                hi_exch = max(prices, key=prices.get)
-                lo_exch = min(prices, key=prices.get)
-                
-                diff = ((prices[hi_exch] - prices[lo_exch]) / prices[lo_exch]) * 100
-                net_diff = diff - 0.2  # הורדת עמלות ממוצעת
+                highest = max(prices, key=prices.get)
+                lowest = min(prices, key=prices.get)
+                diff = ((prices[highest] - prices[lowest]) / prices[lowest]) * 100
+                net_diff = diff - 0.2
 
-                # סף נמוך מאוד כדי לוודא שאתה מקבל הודעות
                 if net_diff > 0.05:
-                    msg = (f"💰 הזדמנות ארביטראז'!\n"
+                    msg = (f"💰 פער נמצא!\n"
                            f"מטבע: {symbol}\n"
-                           f"קנה ב-{lo_exch}: {prices[lo_exch]}\n"
-                           f"מכור ב-{hi_exch}: {prices[hi_exch]}\n"
-                           f"רווח נטו מוערך: {net_diff:.2f}%")
+                           f"קנה ב-{lowest}: {prices[lowest]}\n"
+                           f"מכור ב-{highest}: {prices[highest]}\n"
+                           f"רווח נטו: {net_diff:.2f}%")
                     send_telegram_message(msg)
         
-        # המתנה של 30 שניות בין סבבי סריקה
         time.sleep(30)
 
 if __name__ == "__main__":
-    # הפעלת שרת האינטרנט בשרשור נפרד כדי שלא יעצור את הסריקה
-    t = threading.Thread(target=run_flask, daemon=True)
-    t.start()
-    
-    # הפעלת הלולאה המרכזית
+    threading.Thread(target=run_flask, daemon=True).start()
     check_arbitrage()
