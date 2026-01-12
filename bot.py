@@ -5,7 +5,6 @@ import threading
 from flask import Flask
 import os
 
-# שרת לבדיקת תקינות (Health Check)
 app = Flask(__name__)
 
 @app.route('/')
@@ -36,19 +35,20 @@ exchanges = {
 
 def send_telegram_message(message):
     if not TOKEN or not CHAT_ID:
-        print("Error: Missing TOKEN or CHAT_ID in Environment variables!")
+        print(f"ERROR: Missing credentials. TOKEN: {bool(TOKEN)}, CHAT_ID: {bool(CHAT_ID)}")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
         response = requests.post(url, json=payload)
-        print(f"Telegram status: {response.status_code}")
+        print(f"Telegram status: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Telegram error: {e}")
 
 def check_arbitrage():
-    print("Starting secure scanner loop...")
-    send_telegram_message("✅ הבוט הופעל בהצלחה במצב מאובטח! מתחיל סריקה...")
+    print("Scanner loop started...")
+    # הודעה שתוכיח שה-Deploy הצליח והמשתנים נקלטו
+    send_telegram_message("✅ הבוט הופעל בהצלחה במצב מאובטח! המערכת סורקת כעת...")
     
     while True:
         for symbol in SYMBOLS:
