@@ -14,7 +14,7 @@ def get_current_time():
 
 @app.route('/')
 def home():
-    return f"Bot is running. Time: {get_current_time()}", 200
+    return f"Bot is running. Server Time: {get_current_time()}", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -34,34 +34,33 @@ exchanges = {
 
 def send_telegram_message(message):
     if not TOKEN or not CHAT_ID:
-        print(f"[{get_current_time()}] ❌ שגיאה: TOKEN או CHAT_ID חסרים בהגדרות Render")
+        print(f"[{get_current_time()}] ❌ שגיאה: TOKEN או CHAT_ID חסרים ב-Render Environment")
         return
     
-    # הוספת השעה לכל הודעה שיוצאת לטלגרם
     timed_msg = f"[{get_current_time()}] {message}"
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": timed_msg}
     
     try:
         response = requests.post(url, json=payload, timeout=10)
-        # שורה קריטית: מדפיסה ללוג אם השליחה הצליחה (200) או נכשלה
-        print(f"[{get_current_time()}] 📡 סטטוס טלגרם: {response.status_code}")
+        # השורה הזו חייבת להופיע בלוגים אם הקוד רץ!
+        print(f"[{get_current_time()}] 📡 ניסיון שליחה לטלגרם - סטטוס: {response.status_code}")
     except Exception as e:
-        print(f"[{get_current_time()}] ❌ שגיאת חיבור: {e}")
+        print(f"[{get_current_time()}] ❌ שגיאת חיבור לטלגרם: {e}")
 
 def check_arbitrage():
-    # הודעה ראשונה ללוג של Render
+    # הודעה ראשונה שחייבת להופיע ב-Logs של Render
     print(f"[{get_current_time()}] 🚀 הבוט התניע ומתחיל סריקה")
     
-    # שליחת הודעה מיידית לטלגרם - זה יקרה מיד עם סיום ה-Deploy!
-    send_telegram_message("✅ הבוט עלה לאוויר בהצלחה. תקבל הודעה בכל חצי שעה ובכל זיהוי רווח.")
+    # הודעה מיידית לטלגרם כדי שתדע שזה עובד
+    send_telegram_message("✅ הבוט עלה לאוויר! תקבל דיווח בכל חצי שעה ובכל זיהוי רווח.")
     
     last_heartbeat = time.time()
     
     while True:
-        # שליחת הודעת "דופק" כל 30 דקות (1800 שניות)
+        # דיווח חצי שעתי (1800 שניות)
         if time.time() - last_heartbeat >= 1800:
-            send_telegram_message("🔄 דיווח חצי-שעתי: הבוט פעיל וסורק פערים.")
+            send_telegram_message("🔄 דיווח חצי-שעתי: הבוט פעיל וסורק.")
             last_heartbeat = time.time()
 
         for symbol in SYMBOLS:
