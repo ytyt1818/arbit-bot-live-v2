@@ -5,22 +5,21 @@ import threading
 from flask import Flask
 import os
 
-# הגדרת אפליקציית Flask
+# שרת לבדיקת תקינות (Health Check)
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running!", 200
+    return "Bot is running securely!", 200
 
 def run_flask():
-    # שימוש בפורט 10000 כברירת מחדל עבור Render
+    # שימוש בפורט 10000 כברירת מחדל של Render
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask server starting on port {port}")
     app.run(host='0.0.0.0', port=port)
 
-# --- הגדרות הבוט שלך ---
-TOKEN = "7369970928:AAHny6v0fN7V_hWlT7L3z67S8zI-yY3D7oY"
-CHAT_ID = "5334659223"
+# משיכת הנתונים המאובטחים שהגדרת ב-Render
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 SYMBOLS = [
     'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT',
@@ -36,6 +35,9 @@ exchanges = {
 }
 
 def send_telegram_message(message):
+    if not TOKEN or not CHAT_ID:
+        print("Error: Missing TOKEN or CHAT_ID in Environment variables!")
+        return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
@@ -45,9 +47,8 @@ def send_telegram_message(message):
         print(f"Telegram error: {e}")
 
 def check_arbitrage():
-    print("Starting scanner loop...")
-    # הודעה שחייבת להופיע בטלגרם אם הכל תקין
-    send_telegram_message("🤖 מערכת אותחלה: מתחיל סריקה עם סף בדיקה 0.05%")
+    print("Starting secure scanner loop...")
+    send_telegram_message("✅ הבוט הופעל בהצלחה במצב מאובטח! מתחיל סריקה...")
     
     while True:
         for symbol in SYMBOLS:
@@ -56,7 +57,7 @@ def check_arbitrage():
                 try:
                     ticker = exchange.fetch_ticker(symbol)
                     prices[name] = ticker['last']
-                except Exception as e:
+                except:
                     continue
 
             if len(prices) > 1:
@@ -67,17 +68,14 @@ def check_arbitrage():
                 net_diff = diff - avg_fees
 
                 if net_diff > 0.05:
-                    msg = (f"🔍 נמצא פער (סף נמוך): {symbol}\n"
+                    msg = (f"🔍 נמצא פער (בדיקה): {symbol}\n"
                            f"קנה ב-{lowest}: {prices[lowest]}\n"
                            f"מכור ב-{highest}: {prices[highest]}\n"
                            f"רווח נטו: {net_diff:.2f}%")
                     send_telegram_message(msg)
         
-        print("Completed scan, waiting 30 seconds...")
         time.sleep(30)
 
 if __name__ == "__main__":
-    # הפעלת Flask בשרשור נפרד
     threading.Thread(target=run_flask, daemon=True).start()
-    # התחלת הסריקה מיד
     check_arbitrage()
