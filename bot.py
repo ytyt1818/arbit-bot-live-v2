@@ -4,16 +4,18 @@ import requests
 import threading
 from flask import Flask
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
 def get_current_time():
-    return datetime.now().strftime("%H:%M:%S")
+    # הוספת שעתיים לזמן השרת (UTC) כדי להתאים לשעון ישראל (IST)
+    return (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
 
 @app.route('/')
 def home():
-    return f"Bot is running. Time: {get_current_time()}", 200
+    # מציג את השעה הנכונה גם בדפדפן
+    return f"Bot is running. Israel Time: {get_current_time()}", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -33,8 +35,9 @@ def send_telegram_message(message):
         pass
 
 def check_arbitrage():
-    print(f"[{get_current_time()}] 💎 הבוט התניע! סף רווח נטו חדש: 0.2%")
-    send_telegram_message(f"✅ הבוט עודכן לסף רווח של 0.2% נטו (לאחר עמלות). [{get_current_time()}]")
+    # הודעה ביומנים עם השעה המעודכנת
+    print(f"[{get_current_time()}] 💎 גרסה סופית - שעון ישראל מסונכרן. דיווח כל 15 דק'.")
+    send_telegram_message(f"✅ הבוט התניע מחדש. שעון ישראל מסונכרן! [{get_current_time()}]")
     
     SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT', 'PEPE/USDT']
     exchanges = {
@@ -43,7 +46,14 @@ def check_arbitrage():
         'OKX': ccxt.okx()
     }
     
+    last_heartbeat = time.time()
+    
     while True:
+        # דיווח "אני חי" כל 15 דקות (900 שניות)
+        if time.time() - last_heartbeat >= 900:
+            send_telegram_message(f"🔄 דיווח רבע-שעתי: הבוט סורק ופעיל. [{get_current_time()}]")
+            last_heartbeat = time.time()
+
         for symbol in SYMBOLS:
             prices = {}
             for name, exchange in exchanges.items():
@@ -56,13 +66,12 @@ def check_arbitrage():
             if len(prices) > 1:
                 hi_name = max(prices, key=prices.get)
                 lo_name = min(prices, key=prices.get)
-                price_hi = prices[hi_name]
-                price_lo = prices[lo_name]
+                price_hi, price_lo = prices[hi_name], prices[lo_name]
                 
                 raw_diff = ((price_hi - price_lo) / price_lo) * 100
-                net_diff = raw_diff - 0.2  # עמלות קבועות
+                net_diff = raw_diff - 0.2
                 
-                # עדכון הסף ל-0.2% נטו ומעלה
+                # סף רווח נטו 0.2%
                 if net_diff >= 0.2:
                     msg = (
                         f"💰 *הזדמנות רווח!* ({symbol})\n"
