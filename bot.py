@@ -8,9 +8,13 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
+def get_current_time_obj():
+    # פונקציה פנימית לקבלת אובייקט זמן של ישראל
+    return datetime.now() + timedelta(hours=2)
+
 def get_current_time():
-    # סנכרון לשעון ישראל
-    return (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
+    # מחזירה מחרוזת זמן מעוצבת של ישראל
+    return get_current_time_obj().strftime("%H:%M:%S")
 
 @app.route('/')
 def home():
@@ -24,24 +28,25 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 
 def send_telegram_message(message):
-    if not TOKEN or not CHAT_ID: return
+    if not TOKEN or not CHAT_ID:
+        return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
-    try: requests.post(url, json=payload, timeout=15)
-    except: pass
+    try:
+        requests.post(url, json=payload, timeout=15)
+    except:
+        pass
 
 def check_arbitrage():
-    print(f"[{get_current_time()}] 🚀 הבוט התניע עם 6 בורסות ורשימת מטבעות מורחבת!")
-    send_telegram_message(f"🚀 *עדכון מערכת:* נוספו בורסות Binance, Gate.io ו-KuCoin. רשימת המטבעות הורחבה. [{get_current_time()}]")
+    print(f"[{get_current_time()}] 💎 הבוט רץ. דיווחים בזמנים עגולים (00, 15, 30, 45).")
+    send_telegram_message(f"✅ מערכת עודכנה: 6 בורסות פעילות. דיווחים בזמנים עגולים (00, 15, 30, 45). [{get_current_time()}]")
     
-    # רשימת מטבעות מורחבת
     SYMBOLS = [
         'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 
         'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'LINK/USDT', 'PEPE/USDT',
         'DOGE/USDT', 'SHIB/USDT', 'NEAR/USDT', 'SUI/USDT', 'RENDER/USDT'
     ]
     
-    # הגדרת 6 בורסות
     exchanges = {
         'Bybit': ccxt.bybit(),
         'MEXC': ccxt.mexc({'options': {'adjustForTimeDifference': True}}),
@@ -51,13 +56,16 @@ def check_arbitrage():
         'KuCoin': ccxt.kucoin()
     }
     
-    last_heartbeat = time.time()
+    last_reported_minute = -1
     
     while True:
-        # דיווח רבע-שעתי
-        if time.time() - last_heartbeat >= 900:
-            send_telegram_message(f"🔄 דיווח רבע-שעתי: הבוט סורק 6 בורסות ו-15 מטבעות. [{get_current_time()}]")
-            last_heartbeat = time.time()
+        # בדיקת זמן נוכחי לדיווח רבע-שעתי עגול
+        now = get_current_time_obj()
+        current_minute = now.minute
+        
+        if current_minute in [0, 15, 30, 45] and current_minute != last_reported_minute:
+            send_telegram_message(f"🔄 דיווח תקופתי: הבוט סורק ופעיל. [{get_current_time()}]")
+            last_reported_minute = current_minute
 
         for symbol in SYMBOLS:
             prices = {}
@@ -65,7 +73,8 @@ def check_arbitrage():
                 try:
                     ticker = exchange.fetch_ticker(symbol)
                     prices[name] = ticker['last']
-                except: continue
+                except:
+                    continue
             
             if len(prices) > 1:
                 hi_name = max(prices, key=prices.get)
@@ -87,7 +96,8 @@ def check_arbitrage():
                     )
                     send_telegram_message(msg)
         
-        time.sleep(30)
+        # המתנה קצרה כדי למנוע עומס על ה-CPU ולא לפספס את הדקה המדויקת
+        time.sleep(20)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
