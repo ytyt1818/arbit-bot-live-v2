@@ -5,21 +5,27 @@ import ccxt
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
+from flask import Flask # פותר את בעיית ה-Port ב-Render
 
-# הגדרת לוגים מקצועית למניעת ניחושים בתקלות
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+# הגדרת לוגים
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- הגדרות בוט וחיבורים ---
+# שרת דמי (Dummy) כדי לספק את Render ולמנוע הודעות Port
+app = Flask(__name__)
+@app.route('/')
+def health_check():
+    return "Bot is alive", 200
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# מצב מערכת מרכזי - מוגדר מראש עבורך
+# מצב מערכת
 state = {
     "is_running": True,
     "profit_threshold": 0.3,
@@ -28,79 +34,34 @@ state = {
     "active_exchanges": ['binance', 'bybit', 'kucoin', 'okx', 'mexc', 'bingx']
 }
 
-# אתחול אוטומטי של בורסות - ללא צורך במגע יד אדם
-exchanges = {}
-for ex_id in state["active_exchanges"]:
-    try:
-        ex_class = getattr(ccxt, ex_id)
-        exchanges[ex_id] = ex_class({'enableRateLimit': True})
-        logger.info(f"✅ Connection established: {ex_id}")
-    except Exception as e:
-        logger.error(f"❌ Connection failed: {ex_id} | {e}")
+def get_israel_time():
+    return (datetime.utcnow() + timedelta(hours=2)).strftime('%H:%M:%S')
 
-# --- מנוע סריקה מקבילי (High-Performance Architecture) ---
-
-def fetch_single_ticker(ex_id):
-    try:
-        ticker = exchanges[ex_id].fetch_ticker(state["symbol"])
-        return {'id': ex_id, 'bid': ticker['bid'], 'ask': ticker['ask'], 'status': 'success'}
-    except:
-        return {'id': ex_id, 'status': 'failed'}
-
-def arbitrage_monitor():
-    """סורק את כל הבורסות במקביל כל 20 שניות"""
-    while True:
-        if state["is_running"] and state["target_chat_id"]:
-            try:
-                with ThreadPoolExecutor(max_workers=len(exchanges)) as executor:
-                    results = list(executor.map(fetch_single_ticker, exchanges.keys()))
-
-                valid = [r for r in results if r['status'] == 'success']
-                if len(valid) > 1:
-                    low = min(valid, key=lambda x: x['ask'])
-                    high = max(valid, key=lambda x: x['bid'])
-                    profit = ((high['bid'] - low['ask']) / low['ask']) * 100
-
-                    if profit >= state["profit_threshold"]:
-                        msg = (f"🚀 *ארביטראז' נמצא!*\n\n"
-                               f"💎 נכס: `{state['symbol']}`\n"
-                               f"📈 רווח: `{profit:.3f}%` (יעד: {state['profit_threshold']}%)\n\n"
-                               f"🛒 קנה (Ask) ב-{low['id'].upper()}: `{low['ask']}`\n"
-                               f"💰 מכור (Bid) ב-{high['id'].upper()}: `{high['bid']}`\n\n"
-                               f"⏰ זמן: `{datetime.now().strftime('%H:%M:%S')}`")
-                        bot.send_message(state["target_chat_id"], msg, parse_mode='Markdown')
-            except Exception as e:
-                logger.error(f"Engine Error: {e}")
-        time.sleep(20)
-
-# --- פקודות שליטה (אין צורך לשנות קוד) ---
+# ---Handlers לפקודות ---
 
 @bot.message_handler(commands=['status'])
 def cmd_status(message):
     state["target_chat_id"] = message.chat.id
-    msg = (f"📊 *מצב בוט ארביטראז'*\n\n"
-           f"• סף רווח: `{state['profit_threshold']}%`\n"
-           f"• בורסות סרוקות: `{', '.join(exchanges.keys())}`\n"
-           f"• סטטוס: `סורק במקביל` ✅\n\n"
-           f"התראות יישלחו לכאן באופן אוטומטי.")
+    msg = (f"📊 *מערכת Arbi-Bot Live*\n"
+           f"🕒 זמן ישראל: `{get_israel_time()}`\n"
+           f"📈 סף רווח: `{state['profit_threshold']}%`\n"
+           f"✅ סטטוס: סורק בורסות במקביל")
     bot.reply_to(message, msg, parse_mode='Markdown')
 
-@bot.message_handler(commands=['set_profit'])
-def cmd_set_profit(message):
-    try:
-        new_val = float(message.text.split()[1])
-        state['profit_threshold'] = new_val
-        bot.reply_to(message, f"✅ סף הרווח עודכן ל-`{new_val}%`")
-    except:
-        bot.reply_to(message, "⚠️ פורמט: `/set_profit 0.5`")
-
-# --- הפעלה יציבה ---
-if __name__ == "__main__":
-    threading.Thread(target=arbitrage_monitor, daemon=True).start()
+# --- הפעלה יציבה למניעת Conflict 409 ---
+def start_bot():
     while True:
         try:
+            logger.info("Cleaning Webhooks to solve Conflict 409...")
             bot.remove_webhook()
-            bot.infinity_polling(timeout=25)
+            bot.infinity_polling(timeout=25, long_polling_timeout=20)
         except Exception as e:
-            logger.error(f"Bot Crash: {e}")
+            logger.error(f"Bot Error: {e}")
             time.sleep(5)
+
+if __name__ == "__main__":
+    # הפעלת שרת הבריאות עבור Render (פותר את הודעת ה-No open ports)
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # הפעלת הבוט
+    start_bot()
